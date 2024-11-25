@@ -1,0 +1,472 @@
+from customtkinter import *
+from tkinter import ttk
+import tkinter as tk
+import psycopg2
+from PIL import Image
+from tkinter import messagebox
+    
+def destroy_program(): # Login penceresi kapanırsa program da kapansın
+    main_menu.destroy()
+    
+def get_connection():
+    return psycopg2.connect(
+            dbname='stock_management_system',  # Veritabanı adı
+            user='postgres',               # Kullanıcı adı
+            password='12345',                   # Şifre
+            host='localhost',                   # Sunucu
+            port='5432'                         # Port
+            )
+    
+    
+def center_window(window, width, height):
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+    position_top = int(screen_height / 2 - height / 2)
+    position_right = int(screen_width / 2 - width / 2)
+    window.geometry(f'{width}x{height}+{position_right}+{position_top}')
+
+    
+def validate_user(username, password):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Kullanıcı adı ve şifre ile sorgu
+        cursor.execute("SELECT * FROM Admin WHERE username=%s AND password=%s", (username, password))
+        user = cursor.fetchone()
+        
+        return user is not None  # Kullanıcı mevcutsa True, değilse False döndür
+
+    except Exception as e:
+        print(f"An error occured: {e}")
+        return False
+    
+def branch_stock_menu(admin_id):
+    branch_stock_window = CTkToplevel(main_menu)
+    branch_stock_window.transient(main_menu)
+    branch_stock_window.title("Branch Stock")
+    branch_stock_window.geometry("1400x550")
+    branch_stock_window.resizable(False, False)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""SELECT
+            r.name AS region_name,
+            City.name AS city_name,
+            b.name AS branch_name,
+            b.opening_date AS opening_date,
+            b.type AS type,
+            p.name AS product_name,
+            p.cost AS cost,
+            c.name AS category_name,
+            c.type AS category_type,
+            bs.quantity AS quantity
+        
+            FROM
+                Region r
+            FULL JOIN
+                City ON r.id = city.region_id
+            FULL JOIN
+                Branch b ON city.id = b.city_id
+            FULL JOIN
+                Branch_Stock bs ON b.id = bs.branch_id
+            FULL JOIN
+                Product p ON bs.product_id = p.id
+            FULL JOIN
+                Category c ON p.category_id = c.id
+            WHERE
+                r.admin_id = %s
+            ORDER BY city.name, b.name;""", (admin_id,))
+            
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]        
+    cursor.close()
+    conn.close()
+    
+    return rows, columns, branch_stock_window  
+
+def show_branch_stock_table(admin_id):
+    rows, columns, branch_stock_window = branch_stock_menu(admin_id)
+    style = ttk.Style(branch_stock_window)
+    style.theme_use("clam")
+    style.configure(
+        "Treeview", #hangi ttk widget'ına işlem yapılacağının belirtilmesi
+        font=("Arial", 12),
+        foreground="#fff", #tablodaki değerlerin rengi
+        background="#000", #tablonun arka plan rengi
+        fieldbackground="#313837",
+    )
+    style.map("Treeview", background=[("selected", "#6BF62D")])
+
+    frame = ttk.Frame(branch_stock_window)
+    frame.pack(fill="both", expand=True, padx=20, pady=20) 
+
+    x_scroll = ttk.Scrollbar(frame, orient="horizontal")
+    y_scroll = ttk.Scrollbar(frame, orient="vertical")
+    
+    tree = ttk.Treeview(
+        frame, 
+        columns=columns, 
+        show="headings",
+        xscrollcommand=x_scroll.set, 
+        yscrollcommand=y_scroll.set,
+    )
+    for col in columns: 
+        tree.heading(col, text=col) 
+        tree.column(col, anchor="center", width=100) 
+
+    x_scroll.config(command=tree.xview)
+    y_scroll.config(command=tree.yview)
+
+    x_scroll.pack(side="bottom", fill="x")
+    y_scroll.pack(side="right", fill="y")
+
+    for row in rows:
+        tree.insert("", tk.END, values=row)
+
+    tree.pack(fill="both", expand=True)
+            
+def region_stock_menu(admin_id):
+    region_stock_window = CTkToplevel(main_menu)
+    region_stock_window.transient(main_menu)#yeni pencere ana pencerenin üstünde açılsın ve ana pencerede işlemi kısıtlansın
+    region_stock_window.title("Region Stock")
+    region_stock_window.geometry("1200x500")
+    region_stock_window.resizable(False, False)
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+            
+    cursor.execute("""SELECT 
+            r.name AS region_name,
+            p.name AS product_name,
+            p.cost AS product_cost,
+            c.name AS category_name,
+            c.type AS category_type,
+            rs.quantity AS quantity
+            FROM 
+                Region r
+            FULL JOIN 
+                Region_Stock rs ON r.id = rs.region_id
+            FULL JOIN 
+                Product p ON rs.product_id = p.id
+            FULL JOIN 
+                Category c ON p.category_id = c.id
+            WHERE 
+                r.admin_id = %s
+            ORDER BY c.name, c.type;""", (admin_id,))
+            
+    rows = cursor.fetchall()  # Veriyi al örn: rows = [(1, "Ali", 25),(2, "Fatih", 30)]
+    columns = [desc[0] for desc in cursor.description]  # Sütun adlarını al örn: columns = ['id', 'name', 'age']
+    cursor.close()
+    conn.close()
+    return rows, columns, region_stock_window
+
+
+def show_region_stock_table(admin_id):
+    rows, columns, region_stock_window = region_stock_menu(admin_id)
+    style = ttk.Style(region_stock_window)
+    style.theme_use("clam")
+    style.configure(
+        "Treeview", #hangi ttk widget'ına işlem yapılacağının belirtilmesi
+        font=("Arial", 12),
+        foreground="#fff", #tablodaki değerlerin rengi
+        background="#000", #tablonun arka plan rengi
+        fieldbackground="#313837",
+    )
+    style.map("Treeview", background=[("selected", "#6BF62D")]) #imleçle üzerine gelindiğinde gerçekleşecek işlem
+
+    #Çerçeve oluştur ve tabloyu içine yerleştir
+    frame = ttk.Frame(region_stock_window)
+    frame.pack(fill="both", expand=True, padx=20, pady=20)  # Çerçeveye boşluk ekle
+
+    #Tablo için kaydırma çubukları
+    x_scroll = ttk.Scrollbar(frame, orient="horizontal")
+    y_scroll = ttk.Scrollbar(frame, orient="vertical")
+    
+    #Tabloyu oluştur
+    tree = ttk.Treeview(
+        frame, 
+        columns=columns, 
+        show="headings", #ilk satırda sütun isimlerini göster
+        xscrollcommand=x_scroll.set, 
+        yscrollcommand=y_scroll.set,
+    )
+    for col in columns: 
+        tree.heading(col, text=col) #sorgudan gelen kolon isimlerini değiştirebiliriz fakat burda aynı bıraktık
+        tree.column(col, anchor="center", width=100) #kolondaki değerin hizalanması
+
+    # Kaydırma çubuklarını bağlayın
+    x_scroll.config(command=tree.xview)
+    y_scroll.config(command=tree.yview)
+
+    # Kaydırma çubuklarını yerleştirin
+    x_scroll.pack(side="bottom", fill="x")
+    y_scroll.pack(side="right", fill="y")
+
+    # Verileri tabloya ekle
+    for row in rows:
+        tree.insert("", tk.END, values=row)
+
+    # Tabloyu yerleştir
+    tree.pack(fill="both", expand=True)
+    
+    
+    
+    
+def fetch_category_names(): # kategori adlarını dizi şeklinde döndürür 
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT name FROM Category")
+    categories = [row[0] for row in cur.fetchall()]
+    conn.close()
+    return categories
+
+def fetch_category_types(category_var):
+    conn = get_connection()
+    cur = conn.cursor()
+    selected_category = category_var.get()
+    cur.execute("SELECT DISTINCT type FROM Category WHERE name=%s",(selected_category,))
+    types = [row[0] for row in cur.fetchall()]
+    conn.close()
+    return types
+
+def update_types_menu(category_var, type_optionmenu, types_var):
+    types = fetch_category_types(category_var)  # Yeni türleri al
+    types_var.set(types[0])  # İlk türü varsayılan yap
+    type_optionmenu.configure(values=types)  # OptionMenu'yu güncelle
+    
+def add_product(admin_id):
+    add_product_window = CTkToplevel(main_menu)
+    add_product_window.transient(main_menu)
+    add_product_window.title("Add New Product")
+    add_product_window.geometry("1500x600")
+    add_product_window.resizable(False, False)
+    
+    left_frame = CTkFrame(master=add_product_window, width=450, border_width=1, border_color='white', corner_radius=0)
+    left_frame.pack(side="left", fill="y")
+    right_frame = CTkFrame(master=add_product_window, width=1050, border_width=1, border_color='white', corner_radius=0)
+    right_frame.pack(side="right", fill="y")
+    
+    
+    product_name_label = CTkLabel(left_frame, text="Product Name = ", font=FONT)
+    product_name_label.place(x=20, y=30)
+    product_name_entry = CTkEntry(left_frame, width=200)
+    product_name_entry.place(x=190, y=30)
+    
+    categories = fetch_category_names() # kategori isim listesi
+    category_var = StringVar(value=categories[0])
+    category_name_label = CTkLabel(left_frame, text="Category Name = ", font=FONT)
+    category_name_label.place(x=20, y=90)
+    caretory_optionmenu = CTkOptionMenu(left_frame, values=categories, variable=category_var, width=200)
+    caretory_optionmenu.place(x=190, y=90)
+    
+    types = fetch_category_types(category_var)
+    types_var = StringVar(value=types[0])
+    type_label = CTkLabel(left_frame, text="Category Name = ", font=FONT)
+    type_label.place(x=20, y=145)
+    type_optionmenu = CTkOptionMenu(left_frame, values=types, variable=types_var, width=200)
+    type_optionmenu.place(x=190, y=145)
+    
+    def on_category_change(*args):
+        update_types_menu(category_var, type_optionmenu, types_var)
+
+    category_var.trace("w", on_category_change)  # kategori değişikliğini dinler 
+    
+    
+    product_stock_label = CTkLabel(left_frame, text="Stock = ", font=FONT)
+    product_stock_label.place(x=20, y=200)
+    product_stock_entry = CTkEntry(left_frame, width=200)
+    product_stock_entry.place(x=190, y=200)
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+
+    '''try:
+        # Kullanıcıdan alınan değerler
+        product_name = entry_product_name.get()
+        product_cost = int(entry_product_cost.get())
+        category_name = entry_category_name.get()
+        category_type = entry_category_type.get()
+        quantity = int(entry_quantity.get())
+        region_id = 1  # Sabit bir bölge kimliği (örnek)
+
+        # Veritabanı bağlantısı
+        conn = get_connection()
+        cur = conn.cursor()
+
+        # Category tablosuna ekleme veya var olan ID'yi alma
+        cur.execute("""
+            INSERT INTO Category (name, type)
+            VALUES (%s, %s)
+            ON CONFLICT (name, type) 
+            DO UPDATE SET name = EXCLUDED.name 
+            RETURNING category_id
+        """, (category_name, category_type))
+        category_id = cur.fetchone()[0]
+
+        # Product tablosuna ürün ekleme
+        cur.execute("""
+            INSERT INTO Product (name, cost, category_id)
+            VALUES (%s, %s, %s)
+            RETURNING product_id
+        """, (product_name, product_cost, category_id))
+        product_id = cur.fetchone()[0]
+
+        # Region_Stock tablosuna stok ekleme
+        cur.execute("""
+            INSERT INTO Region_Stock (region_id, product_id, quantity)
+            VALUES (%s, %s, %s)
+        """, (region_id, product_id, quantity))
+
+        # Veritabanı işlemlerini kaydet
+        conn.commit()
+
+        # Başarı mesajı
+        messagebox.showinfo("Başarılı", "Ürün başarıyla eklendi!")
+
+        # Formu temizle
+        clear_form()
+
+    except Exception as e:
+        conn.rollback()
+        messagebox.showerror("Hata", f"Bir hata oluştu: {e}")
+    finally:
+        cur.close()
+        conn.close()
+        '''
+        
+'''def clear_form():
+    entry_product_name.delete(0, tk.END)
+    entry_product_cost.delete(0, tk.END)
+    entry_category_name.delete(0, tk.END)
+    entry_category_type.delete(0, tk.END)
+    entry_quantity.delete(0, tk.END) '''   
+
+
+
+
+def control_menu():
+    control_window = CTkToplevel(main_menu)
+    control_window.title("Stock Management System")
+    control_window.geometry("250x400")
+    control_window.resizable(False, False)
+    center_window(control_window, 250, 250)
+    control_window.protocol("WM_DELETE_WINDOW", destroy_program)
+      
+    customer_login_button = CTkButton(control_window, text="Customer Login", fg_color=button_color, hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white", text_color="black")
+    admin_login_button = CTkButton(control_window, text="Admin Login", fg_color=button_color,  command=lambda: control(control_window),hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white", text_color="black")
+    control_window.columnconfigure(0, weight=1)
+    control_window.rowconfigure(0, weight=1)
+    control_window.rowconfigure(1, weight=1)
+    
+    customer_login_button.grid(row=0, column=0, ipadx=20, ipady=30)
+    admin_login_button.grid(row=1, column=0, ipadx=32, ipady=30)
+    
+def control(control_window):
+    control_window.destroy()
+    login_menu()
+            
+def login(username, password, error, login_window):
+    username = username.get()
+    password = password.get()
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM admin WHERE username=%s AND password=%s", (username, password,))
+    admin_id = cursor.fetchone()
+    
+    conn.close()
+    
+    if validate_user(username, password):
+        login_window.destroy()
+        open_main_menu(username, admin_id)  
+    else:
+        error.configure(text="Username or password is incorrect.")
+
+def login_menu():
+    login_window = CTkToplevel(main_menu)
+    login_window.title("Login Admin")
+    login_window.geometry("300x400")
+    login_window.resizable(False,False)
+    center_window(login_window, 300, 400)
+
+    image_path = 'user.png'
+    img = CTkImage(Image.open(image_path),size=(100, 100))
+    imagelabel = CTkLabel(login_window, image=img, text="")
+    imagelabel.pack(pady=20)
+
+    username_label = CTkLabel(login_window, text="Username:", font=('Arial',17))
+    username_label.pack(pady=5)
+    username_entry = CTkEntry(login_window)
+    username_entry.pack(pady=5)
+
+    password_label = CTkLabel(login_window, text="Password:", font=('Arial',17))
+    password_label.pack(pady=5)
+    password_entry = CTkEntry(login_window, show="*")
+    password_entry.pack(pady=5)
+
+    login_button = CTkButton(login_window, text="Login", command=lambda: login(username_entry, password_entry, error_label, login_window), fg_color=button_color, hover=False, font=('Arial',17), border_width=2, border_color="white", text_color="black")
+    login_button.pack(pady=10)
+
+    # Başta boş bir label, login işleminde hata olursa configure ile text ekleniyor
+    error_label = CTkLabel(login_window, text="", text_color="red")
+    error_label.pack(pady=5)
+    
+    
+    login_window.protocol("WM_DELETE_WINDOW", destroy_program) #Eğer login ekranı kapatılırsa programı komple kapat
+
+def open_main_menu(username, admin_id):# Ana Menu
+    main_menu.deiconify()# Ana menü penceresini tekrar görünür hale getir
+    left_frame = CTkFrame(master=main_menu, border_width=1, border_color='white', width=200, corner_radius=0)
+    left_frame.pack(side='left', fill=BOTH, expand=True)
+    right_frame = CTkFrame(master=main_menu, border_width=1, border_color='white', width=600, corner_radius=0)
+    right_frame.pack(side='right', fill=BOTH, expand=True)
+    
+    img = CTkImage(Image.open("user.png"),size=(180, 180))
+    imagelabel = CTkLabel(left_frame, image=img, text="")
+    imagelabel.pack(pady=20)
+    
+    welcome_label = CTkLabel(left_frame, text=f'Welcome, {username}', font=('Arial',17))
+    welcome_label.pack()
+    
+    right_frame.columnconfigure(0, weight=1)
+    right_frame.columnconfigure(1, weight=1)
+    right_frame.columnconfigure(2, weight=1)
+    right_frame.rowconfigure(0, weight=1)
+    right_frame.rowconfigure(1, weight=1)
+    
+    button_region_stock = CTkButton(right_frame, text='Region Stock', command=lambda: show_region_stock_table(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_region_stock.grid(row=0, column=0, ipadx=5, ipady=15)
+    
+    button_branch_stock = CTkButton(right_frame, text='Branch Stock', command=lambda: show_branch_stock_table(admin_id),fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_branch_stock.grid(row=0, column=1, ipadx=5, ipady=15)
+    
+    button_add_product = CTkButton(right_frame, text='Add New Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_add_product.grid(row=0, column=2, ipadx=5, ipady=15)
+    
+    button_supply_product = CTkButton(right_frame, text='Supply Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_supply_product.grid(row=1, column=0, ipadx=5, ipady=15)
+    
+    button_update_product = CTkButton(right_frame, text='Update Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_update_product.grid(row=1, column=1, ipadx=5, ipady=15)
+    
+    button_add_product = CTkButton(right_frame, text='Add New Product', command=lambda: add_product(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_add_product.grid(row=1, column=2, ipadx=5, ipady=15)
+
+
+#Uygulamanın ana penceresini oluştur
+main_menu = CTk()
+main_menu.title("Stock Management System")
+main_menu.geometry("800x270")
+main_menu.resizable(False, False)
+main_menu.withdraw()#Başlangıçta ana menüyü gizle
+center_window(main_menu, 800, 270)
+FONT=('Arial', 20)
+button_color = "#7DDE52"
+set_appearance_mode("dark")
+control_menu() #Giriş penceresi
+set_default_color_theme("green")
+
+main_menu.mainloop()
