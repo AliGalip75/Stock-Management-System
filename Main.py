@@ -236,11 +236,76 @@ def update_types_menu(category_var, type_optionmenu, types_var):
     types_var.set(types[0])  # İlk türü varsayılan yap
     type_optionmenu.configure(values=types)  # OptionMenu'yu güncelle
     
+def add_new_product(name, category, category_type, quantity, cost, tree, admin_id):
+    if not name or not quantity or not cost:
+        tk.messagebox.showerror("Error", "Please fill all fields.")
+        return
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT id FROM Category WHERE name = %s AND type = %s", 
+            (category, category_type)
+        )
+        category_id = cursor.fetchone()
+        if not category_id:
+            tk.messagebox.showerror("Error", "Invalid category.")
+            return
+
+        # Yeni ürünü ekle
+        cursor.execute(
+            """
+            INSERT INTO Product (name, cost, category_id) 
+            VALUES (%s, %s, %s) RETURNING id
+            """,
+            (name, cost, category_id)
+        )
+        product_id = cursor.fetchone()[0]
+
+        # Bölge stoğuna yeni ürünü ekle
+        cursor.execute(
+            """
+            INSERT INTO Region_Stock (region_id, product_id, quantity)
+            VALUES (
+                (SELECT id FROM Region WHERE admin_id = %s), 
+                %s, 
+                %s
+            )
+            """,
+            (admin_id, product_id, quantity)
+        )
+
+        # Veritabanını kaydet
+        conn.commit()
+
+        # Tabloyu güncelle
+        tree.insert(
+            "",
+            tk.END,
+            values=(product_id, name, cost, category_id, category, category_type)
+        )
+
+        tk.messagebox.showinfo("Success", "Product added successfully!")
+
+    except Exception as e:
+        tk.messagebox.showerror("Error", f"An error occurred: {e}")
+
+    finally:
+        cursor.close()
+        conn.close()
+    
+def clear_add_product_form(name, stock, cost):
+        name.delete(0, tk.END)
+        stock.delete(0, tk.END)
+        cost.delete(0, tk.END)
+
 def add_product(admin_id):
     add_product_window = CTkToplevel(main_menu)
     add_product_window.transient(main_menu)
     add_product_window.title("Add New Product")
-    add_product_window.geometry("1500x600")
+    add_product_window.geometry("1500x550")
     add_product_window.resizable(False, False)
     
     left_frame = CTkFrame(master=add_product_window, width=450, border_width=1, border_color='white', corner_radius=0)
@@ -257,16 +322,17 @@ def add_product(admin_id):
     categories = fetch_category_names() # kategori isim listesi
     category_var = StringVar(value=categories[0])
     category_name_label = CTkLabel(left_frame, text="Category Name = ", font=FONT)
-    category_name_label.place(x=20, y=90)
+    category_name_label.place(x=20, y=120)
     caretory_optionmenu = CTkOptionMenu(left_frame, values=categories, variable=category_var, width=200)
-    caretory_optionmenu.place(x=190, y=90)
+    caretory_optionmenu.place(x=190, y=120)
     
     types = fetch_category_types(category_var)
     types_var = StringVar(value=types[0])
-    type_label = CTkLabel(left_frame, text="Category Name = ", font=FONT)
-    type_label.place(x=20, y=145)
+    type_label = CTkLabel(left_frame, text="Category Type = ", font=FONT)
+    type_label.place(x=20, y=210)
     type_optionmenu = CTkOptionMenu(left_frame, values=types, variable=types_var, width=200)
-    type_optionmenu.place(x=190, y=145)
+    type_optionmenu.place(x=190, y=210)
+    
     
     def on_category_change(*args):
         update_types_menu(category_var, type_optionmenu, types_var)
@@ -275,76 +341,120 @@ def add_product(admin_id):
     
     
     product_stock_label = CTkLabel(left_frame, text="Stock = ", font=FONT)
-    product_stock_label.place(x=20, y=200)
+    product_stock_label.place(x=20, y=300)
     product_stock_entry = CTkEntry(left_frame, width=200)
-    product_stock_entry.place(x=190, y=200)
+    product_stock_entry.place(x=190, y=300)
     
+    cost_label = CTkLabel(left_frame, text="Cost = ", font=FONT)
+    cost_label.place(x=20, y=390)
+    cost_entry = CTkEntry(left_frame, width=200)
+    cost_entry.place(x=190, y=390)
+    
+    cancel_button = CTkButton(left_frame, text="Reset", command=lambda: clear_add_product_form(product_name_entry, product_stock_entry, cost_entry), fg_color=button_color, hover=False, font=('Arial',17), border_width=2, border_color="white", width=150)
+    cancel_button.place(x=40, y=480)
+    
+    cancel_button = CTkButton(left_frame, text="Add", fg_color=button_color, hover=False, font=('Arial',17), border_width=2, border_color="white", width=150, command=lambda: add_new_product(
+                                product_name_entry.get(),
+                                category_var.get(),
+                                types_var.get(),
+                                product_stock_entry.get(),
+                                cost_entry.get(),
+                                tree,
+                                admin_id
+                                )
+    )
+    cancel_button.place(x=240, y=480)
+    
+
+    
+    # Veritabanı bağlantısı
     conn = get_connection()
     cursor = conn.cursor()
     
+    cursor.execute("""
+                SELECT p.id AS product_id,
+                        p.name AS product_name,
+                        p.cost AS product_cost,
+                        c.id,
+                        c.name AS category_name, 
+                        c.type AS category_type
+                FROM Product p
+                JOIN Category c 
+                ON p.category_id = c.id
+                WHERE p.id IN(SELECT product_id 
+                                FROM Region_Stock
+                                WHERE region_id = (SELECT id 
+                                                    FROM Region
+                                                    WHERE admin_id = %s
+                                                    )
+                            )
+                ORDER BY p.id ASC;
+                    """,(admin_id,))
 
-    '''try:
-        # Kullanıcıdan alınan değerler
-        product_name = entry_product_name.get()
-        product_cost = int(entry_product_cost.get())
-        category_name = entry_category_name.get()
-        category_type = entry_category_type.get()
-        quantity = int(entry_quantity.get())
-        region_id = 1  # Sabit bir bölge kimliği (örnek)
+    rows = cursor.fetchall()  # Veriyi al örn: rows = [(1, "Ali", 25),(2, "Fatih", 30)]
+    columns = [desc[0] for desc in cursor.description]  # Sütun adlarını al örn: columns = ['id', 'name', 'age']
+    cursor.close()
+    conn.close()
+    style = ttk.Style(add_product_window)
+    style.theme_use("clam")
+    style.configure(
+        "Treeview", #hangi ttk widget'ına işlem yapılacağının belirtilmesi
+        font=("Arial", 12),
+        foreground="#fff", #tablodaki değerlerin rengi
+        background="#000", #tablonun arka plan rengi
+        fieldbackground="#313837",
+    )
+    style.map("Treeview", background=[("selected", "#6BF62D")]) #imleçle üzerine gelindiğinde gerçekleşecek işlem
 
-        # Veritabanı bağlantısı
-        conn = get_connection()
-        cur = conn.cursor()
+    #Çerçeve oluştur ve tabloyu içine yerleştir
+    frame = CTkFrame(right_frame, width=1050)
+    frame.pack(fill="both", expand=True, padx=20, pady=20)  # Çerçeveye boşluk ekle
 
-        # Category tablosuna ekleme veya var olan ID'yi alma
-        cur.execute("""
-            INSERT INTO Category (name, type)
-            VALUES (%s, %s)
-            ON CONFLICT (name, type) 
-            DO UPDATE SET name = EXCLUDED.name 
-            RETURNING category_id
-        """, (category_name, category_type))
-        category_id = cur.fetchone()[0]
-
-        # Product tablosuna ürün ekleme
-        cur.execute("""
-            INSERT INTO Product (name, cost, category_id)
-            VALUES (%s, %s, %s)
-            RETURNING product_id
-        """, (product_name, product_cost, category_id))
-        product_id = cur.fetchone()[0]
-
-        # Region_Stock tablosuna stok ekleme
-        cur.execute("""
-            INSERT INTO Region_Stock (region_id, product_id, quantity)
-            VALUES (%s, %s, %s)
-        """, (region_id, product_id, quantity))
-
-        # Veritabanı işlemlerini kaydet
-        conn.commit()
-
-        # Başarı mesajı
-        messagebox.showinfo("Başarılı", "Ürün başarıyla eklendi!")
-
-        # Formu temizle
-        clear_form()
-
-    except Exception as e:
-        conn.rollback()
-        messagebox.showerror("Hata", f"Bir hata oluştu: {e}")
-    finally:
-        cur.close()
-        conn.close()
-        '''
+    #Tablo için kaydırma çubukları
+    x_scroll = ttk.Scrollbar(frame, orient="horizontal")
+    y_scroll = ttk.Scrollbar(frame, orient="vertical")
         
-'''def clear_form():
-    entry_product_name.delete(0, tk.END)
-    entry_product_cost.delete(0, tk.END)
-    entry_category_name.delete(0, tk.END)
-    entry_category_type.delete(0, tk.END)
-    entry_quantity.delete(0, tk.END) '''   
+    #Tabloyu oluştur
+    tree = ttk.Treeview(
+        frame, 
+        columns=columns, 
+        show="headings", #ilk satırda sütun isimlerini göster
+        xscrollcommand=x_scroll.set, 
+        yscrollcommand=y_scroll.set,
+    )
+    for col in columns: 
+        tree.column(col, anchor="center", width=200,) #kolondaki değerin hizalanması
+        
+    tree.heading("product_id", text="Product Id")
+    tree.heading("product_name", text="Product Name")
+    tree.heading("product_cost", text="Product Cost")
+    tree.heading("id", text="Category Id")
+    tree.heading("category_name", text="Category Name")
+    tree.heading("category_type", text="Category Type")
+    
+    tree.column("product_id", anchor="center", width=100,)
+    tree.column("product_name", anchor="center", width=200,)
+    tree.column("product_cost", anchor="center", width=200,)
+    tree.column("id", anchor="center", width=100,)
+    tree.column("category_name", anchor="center", width=200,)
+    tree.column("category_type", anchor="center", width=200,)
+    
+    # Kaydırma çubuklarını bağlayın
+    x_scroll.config(command=tree.xview)
+    y_scroll.config(command=tree.yview)
 
+    # Kaydırma çubuklarını yerleştirin
+    x_scroll.pack(side="bottom", fill="x")
+    y_scroll.pack(side="right", fill="y")
 
+    # Verileri tabloya ekle
+    for row in rows:
+        tree.insert("", tk.END, values=row)
+
+    # Tabloyu yerleştir
+    tree.pack(fill="both", expand=True)
+        
+  
 
 
 def control_menu():
@@ -355,8 +465,8 @@ def control_menu():
     center_window(control_window, 250, 250)
     control_window.protocol("WM_DELETE_WINDOW", destroy_program)
       
-    customer_login_button = CTkButton(control_window, text="Customer Login", fg_color=button_color, hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white", text_color="black")
-    admin_login_button = CTkButton(control_window, text="Admin Login", fg_color=button_color,  command=lambda: control(control_window),hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white", text_color="black")
+    customer_login_button = CTkButton(control_window, text="Customer Login", fg_color=button_color, hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white")
+    admin_login_button = CTkButton(control_window, text="Admin Login", fg_color=button_color,  command=lambda: control(control_window),hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white")
     control_window.columnconfigure(0, weight=1)
     control_window.rowconfigure(0, weight=1)
     control_window.rowconfigure(1, weight=1)
@@ -407,7 +517,7 @@ def login_menu():
     password_entry = CTkEntry(login_window, show="*")
     password_entry.pack(pady=5)
 
-    login_button = CTkButton(login_window, text="Login", command=lambda: login(username_entry, password_entry, error_label, login_window), fg_color=button_color, hover=False, font=('Arial',17), border_width=2, border_color="white", text_color="black")
+    login_button = CTkButton(login_window, text="Login", command=lambda: login(username_entry, password_entry, error_label, login_window), fg_color=button_color, hover=False, font=('Arial',17), border_width=2, border_color="white")
     login_button.pack(pady=10)
 
     # Başta boş bir label, login işleminde hata olursa configure ile text ekleniyor
@@ -437,22 +547,22 @@ def open_main_menu(username, admin_id):# Ana Menu
     right_frame.rowconfigure(0, weight=1)
     right_frame.rowconfigure(1, weight=1)
     
-    button_region_stock = CTkButton(right_frame, text='Region Stock', command=lambda: show_region_stock_table(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_region_stock = CTkButton(right_frame, text='Region Stock', command=lambda: show_region_stock_table(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
     button_region_stock.grid(row=0, column=0, ipadx=5, ipady=15)
     
-    button_branch_stock = CTkButton(right_frame, text='Branch Stock', command=lambda: show_branch_stock_table(admin_id),fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_branch_stock = CTkButton(right_frame, text='Branch Stock', command=lambda: show_branch_stock_table(admin_id),fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
     button_branch_stock.grid(row=0, column=1, ipadx=5, ipady=15)
     
-    button_add_product = CTkButton(right_frame, text='Add New Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_add_product = CTkButton(right_frame, text='Add New Product', command=lambda: add_product(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
     button_add_product.grid(row=0, column=2, ipadx=5, ipady=15)
     
-    button_supply_product = CTkButton(right_frame, text='Supply Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_supply_product = CTkButton(right_frame, text='Supply Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
     button_supply_product.grid(row=1, column=0, ipadx=5, ipady=15)
     
-    button_update_product = CTkButton(right_frame, text='Update Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_update_product = CTkButton(right_frame, text='Update Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
     button_update_product.grid(row=1, column=1, ipadx=5, ipady=15)
     
-    button_add_product = CTkButton(right_frame, text='Add New Product', command=lambda: add_product(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", text_color="black") 
+    button_add_product = CTkButton(right_frame, text='Add New Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
     button_add_product.grid(row=1, column=2, ipadx=5, ipady=15)
 
 
@@ -464,9 +574,9 @@ main_menu.resizable(False, False)
 main_menu.withdraw()#Başlangıçta ana menüyü gizle
 center_window(main_menu, 800, 270)
 FONT=('Arial', 20)
-button_color = "#7DDE52"
+button_color = "#3B8E62"
 set_appearance_mode("dark")
 control_menu() #Giriş penceresi
 set_default_color_theme("green")
-
 main_menu.mainloop()
+
