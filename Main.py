@@ -26,28 +26,14 @@ def center_window(window, width, height):
     window.geometry(f'{width}x{height}+{position_right}+{position_top}')
 
     
-def validate_user(username, password):
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        # Kullanıcı adı ve şifre ile sorgu
-        cursor.execute("SELECT * FROM Admin WHERE username=%s AND password=%s", (username, password))
-        user = cursor.fetchone()
-        
-        return user is not None  # Kullanıcı mevcutsa True, değilse False döndür
-
-    except Exception as e:
-        print(f"An error occured: {e}")
-        return False
-    
 def branch_stock_menu(admin_id):
     branch_stock_window = CTkToplevel(main_menu)
     branch_stock_window.transient(main_menu)
     branch_stock_window.title("Branch Stock")
     branch_stock_window.geometry("1400x550")
     branch_stock_window.resizable(False, False)
-
+    center_window(branch_stock_window, 1400, 550)
+    
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -133,6 +119,7 @@ def region_stock_menu(admin_id):
     region_stock_window.title("Region Stock")
     region_stock_window.geometry("1200x500")
     region_stock_window.resizable(False, False)
+    center_window(region_stock_window, 1200, 500)
     
     conn = get_connection()
     cursor = conn.cursor()
@@ -307,6 +294,7 @@ def add_product(admin_id):
     add_product_window.title("Add New Product")
     add_product_window.geometry("1500x550")
     add_product_window.resizable(False, False)
+    center_window(add_product_window, 1500, 550)
     
     left_frame = CTkFrame(master=add_product_window, width=450, border_width=1, border_color='white', corner_radius=0)
     left_frame.pack(side="left", fill="y")
@@ -365,9 +353,9 @@ def add_product(admin_id):
     )
     cancel_button.place(x=240, y=480)
     
-
     
-    # Veritabanı bağlantısı
+    
+    
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -478,6 +466,22 @@ def control(control_window):
     control_window.destroy()
     login_menu()
             
+            
+def validate_user(username, password):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Kullanıcı adı ve şifre ile sorgu
+        cursor.execute("SELECT * FROM Admin WHERE username=%s AND password=%s", (username, password))
+        user = cursor.fetchone()
+        
+        return user is not None  # Kullanıcı mevcutsa True, değilse False döndür
+
+    except Exception as e:
+        print(f"An error occured: {e}")
+        return False            
+            
 def login(username, password, error, login_window):
     username = username.get()
     password = password.get()
@@ -526,6 +530,100 @@ def login_menu():
     
     
     login_window.protocol("WM_DELETE_WINDOW", destroy_program) #Eğer login ekranı kapatılırsa programı komple kapat
+    
+    
+def change_password(admin_id):
+    def validate_form():
+        if not (username_entry.get().strip() and old_password_entry.get().strip() and new_password_entry.get().strip()):
+            tk.messagebox.showerror("Error", "Please fill all fields")
+            clear_change_password_form(username_entry, old_password_entry, new_password_entry)
+            return
+            
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            """
+            SELECT username, password
+            FROM Admin
+            WHERE id=%s
+            """, (admin_id,)
+        )
+        row = cursor.fetchone() # (admin1, pass1)
+        
+        
+        if (row[0] != username_entry.get()) or (row[1] != old_password_entry.get()):
+            tk.messagebox.showerror("Error", "Username or Password Incorrect")
+            clear_change_password_form(username_entry, old_password_entry, new_password_entry)
+        else:
+            new_password = new_password_entry.get()
+            cursor.execute(
+                """
+                UPDATE Admin
+                SET password = %s
+                WHERE username = %s AND password= %s
+                """, (new_password, username_entry.get(), old_password_entry.get()) 
+            )
+            tk.messagebox.showinfo("Successful", "Password changed successfully")
+            clear_change_password_form(username_entry, old_password_entry, new_password_entry)
+            
+        conn.commit()
+        cursor.close()
+        conn.close()
+            
+            
+    change_password_window = CTkToplevel(main_menu)
+    change_password_window.title("Change Password")
+    change_password_window.geometry("450x650")
+    change_password_window.resizable(False, False)
+    center_window(change_password_window, 450, 650)
+    change_password_window.transient(main_menu)
+    
+    img = CTkImage(Image.open("user.png"),size=(150, 150))
+    imagelabel = CTkLabel(change_password_window, image=img, text="")
+    imagelabel.place(x=150, y=20)
+    
+    username_label = CTkLabel(change_password_window, text="Username", font=FONT)
+    username_label.place(x=177, y=200)
+    username_entry = CTkEntry(change_password_window, width=165)
+    username_entry.place(x=145, y=240)
+    
+    old_password_label = CTkLabel(change_password_window, text="Old Password", font=FONT)
+    old_password_label.place(x=160, y=280)
+    old_password_entry = CTkEntry(change_password_window, width=165, show="*")
+    old_password_entry.place(x=145, y=320)
+    
+    show_old_password_var = CTkCheckBox(change_password_window, text="Show", command=lambda: toggle_password_visibility(show_old_password_var, old_password_entry))
+    show_old_password_var.place(x=330, y=320)
+
+    
+    new_password_label = CTkLabel(change_password_window, text="New Password", font=FONT)
+    new_password_label.place(x=160, y=360)
+    new_password_entry = CTkEntry(change_password_window, width=165, show="*")
+    new_password_entry.place(x=145, y=400)
+    
+    show_new_password_var = CTkCheckBox(change_password_window, text="Show", command=lambda: toggle_password_visibility(show_new_password_var, new_password_entry))
+    show_new_password_var.place(x=330, y=400)
+    
+    reset_button = CTkButton(change_password_window, text="Reset", fg_color=button_color, command=lambda: clear_change_password_form(username_entry, old_password_entry, new_password_entry), hover=False, font=FONT, border_width=2, border_color="white")
+    reset_button.place(x=60, y=520)
+    
+    reset_button = CTkButton(change_password_window, text="Save", fg_color=button_color, command=validate_form, hover=False, font=FONT, border_width=2, border_color="white")
+    reset_button.place(x=250, y=520)
+    
+def clear_change_password_form(username, old_pass, new_pass):
+    username.delete(0, tk.END)
+    old_pass.delete(0, tk.END)
+    new_pass.delete(0, tk.END)
+    
+def toggle_password_visibility(show_pass_var, pass_entry):
+    if show_pass_var.get():
+        pass_entry.configure(show="")
+    else:
+        pass_entry.configure(show="*")
+
+
+
 
 def open_main_menu(username, admin_id):# Ana Menu
     main_menu.deiconify()# Ana menü penceresini tekrar görünür hale getir
@@ -535,7 +633,7 @@ def open_main_menu(username, admin_id):# Ana Menu
     right_frame.pack(side='right', fill=BOTH, expand=True)
     
     img = CTkImage(Image.open("user.png"),size=(180, 180))
-    imagelabel = CTkLabel(left_frame, image=img, text="")
+    imagelabel = CTkButton(left_frame, image=img, text="",command= lambda: change_password(admin_id), fg_color="transparent", hover=False)
     imagelabel.pack(pady=20)
     
     welcome_label = CTkLabel(left_frame, text=f'Welcome, {username}', font=('Arial',17))
@@ -562,9 +660,9 @@ def open_main_menu(username, admin_id):# Ana Menu
     button_update_product = CTkButton(right_frame, text='Update Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
     button_update_product.grid(row=1, column=1, ipadx=5, ipady=15)
     
-    button_add_product = CTkButton(right_frame, text='Add New Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
+    button_add_product = CTkButton(right_frame, text='Update', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
     button_add_product.grid(row=1, column=2, ipadx=5, ipady=15)
-
+    
 
 #Uygulamanın ana penceresini oluştur
 main_menu = CTk()
