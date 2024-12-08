@@ -225,7 +225,7 @@ def update_types_menu(category_var, type_optionmenu, types_var):
     
 def add_new_product(name, category, category_type, quantity, cost, tree, admin_id):
     if not name or not quantity or not cost:
-        tk.messagebox.showerror("Error", "Please fill all fields.")
+        messagebox.showerror("Error", "Please fill all fields.")
         return
 
     try:
@@ -627,13 +627,13 @@ def toggle_password_visibility(show_pass_var, pass_entry):
 
 def open_main_menu(username, admin_id):# Ana Menu
     main_menu.deiconify()# Ana menü penceresini tekrar görünür hale getir
-    left_frame = CTkFrame(master=main_menu, border_width=1, border_color='white', width=200, corner_radius=0)
+    left_frame = CTkFrame(master=main_menu, border_width=1, border_color='white', width=280, corner_radius=0)
     left_frame.pack(side='left', fill=BOTH, expand=True)
-    right_frame = CTkFrame(master=main_menu, border_width=1, border_color='white', width=600, corner_radius=0)
+    right_frame = CTkFrame(master=main_menu, border_width=1, border_color='white', width=720, corner_radius=0)
     right_frame.pack(side='right', fill=BOTH, expand=True)
     
     img = CTkImage(Image.open("user.png"),size=(180, 180))
-    imagelabel = CTkButton(left_frame, image=img, text="",command= lambda: change_password(admin_id), fg_color="transparent", hover=False)
+    imagelabel = CTkButton(left_frame, image=img, text="", fg_color="transparent", hover=False)
     imagelabel.pack(pady=20)
     
     welcome_label = CTkLabel(left_frame, text=f'Welcome, {username}', font=('Arial',17))
@@ -645,32 +645,32 @@ def open_main_menu(username, admin_id):# Ana Menu
     right_frame.rowconfigure(0, weight=1)
     right_frame.rowconfigure(1, weight=1)
     
-    button_region_stock = CTkButton(right_frame, text='Region Stock', command=lambda: show_region_stock_table(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
+    button_region_stock = CTkButton(right_frame, text='Region Stock', command=lambda: show_region_stock_table(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_region_stock.grid(row=0, column=0, ipadx=5, ipady=15)
     
-    button_branch_stock = CTkButton(right_frame, text='Branch Stock', command=lambda: show_branch_stock_table(admin_id),fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
+    button_branch_stock = CTkButton(right_frame, text='Branch Stock', command=lambda: show_branch_stock_table(admin_id),fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_branch_stock.grid(row=0, column=1, ipadx=5, ipady=15)
     
-    button_add_product = CTkButton(right_frame, text='Add New Product', command=lambda: add_product(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
+    button_add_product = CTkButton(right_frame, text='Add New Product', command=lambda: add_product(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_add_product.grid(row=0, column=2, ipadx=5, ipady=15)
     
-    button_supply_product = CTkButton(right_frame, text='Supply Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
+    button_supply_product = CTkButton(right_frame, text='Supply Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_supply_product.grid(row=1, column=0, ipadx=5, ipady=15)
     
-    button_update_product = CTkButton(right_frame, text='Update Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
+    button_update_product = CTkButton(right_frame, text='Update Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_update_product.grid(row=1, column=1, ipadx=5, ipady=15)
     
-    button_add_product = CTkButton(right_frame, text='Update', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white") 
+    button_add_product = CTkButton(right_frame, text='Change password',command= lambda: change_password(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_add_product.grid(row=1, column=2, ipadx=5, ipady=15)
     
 
 #Uygulamanın ana penceresini oluştur
 main_menu = CTk()
 main_menu.title("Stock Management System")
-main_menu.geometry("800x270")
+main_menu.geometry("1200x350")
 main_menu.resizable(False, False)
 main_menu.withdraw()#Başlangıçta ana menüyü gizle
-center_window(main_menu, 800, 270)
+center_window(main_menu, 1000, 300)
 FONT=('Arial', 20)
 button_color = "#3B8E62"
 set_appearance_mode("dark")
