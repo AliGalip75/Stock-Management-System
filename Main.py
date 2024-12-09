@@ -24,7 +24,104 @@ def center_window(window, width, height):
     position_top = int(screen_height / 2 - height / 2)
     position_right = int(screen_width / 2 - width / 2)
     window.geometry(f'{width}x{height}+{position_right}+{position_top}')
+    
+    
 
+def fetch_city_names(admin_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""SELECT name 
+                    FROM City
+                    WHERE region_id = (SELECT id 
+				                       FROM Region 
+				                       WHERE admin_id=%s
+				   		                )
+                """,(admin_id))
+    cities = [row[0] for row in cur.fetchall()]
+    conn.close()
+    return cities
+
+def fetch_selected_city_table(tree, city_var, admin_id):
+    
+    tree.delete(*tree.get_children())
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    selected_city = city_var.get()
+    cursor.execute(""" SELECT
+            r.name AS region_name,
+            City.name AS city_name,
+            b.name AS branch_name,
+            b.opening_date AS opening_date,
+            b.type AS type,
+            p.name AS product_name,
+            p.cost AS cost,
+            c.name AS category_name,
+            c.type AS category_type,
+            bs.quantity AS quantity
+        
+            FROM
+                Region r
+            FULL JOIN
+                City ON r.id = city.region_id
+            FULL JOIN
+                Branch b ON city.id = b.city_id
+            FULL JOIN
+                Branch_Stock bs ON b.id = bs.branch_id
+            FULL JOIN
+                Product p ON bs.product_id = p.id
+            FULL JOIN
+                Category c ON p.category_id = c.id
+            WHERE
+                r.admin_id = %s AND City.name = %s
+            ORDER BY city.name, b.name;
+                   """,(admin_id, selected_city))
+            
+    rows = cursor.fetchall()  
+    for row in rows:
+        tree.insert("", tk.END, values=row)
+    cursor.close()
+    conn.close()
+    
+def reset_branch_table(tree, admin_id):
+    tree.delete(*tree.get_children())
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(""" SELECT
+            r.name AS region_name,
+            City.name AS city_name,
+            b.name AS branch_name,
+            b.opening_date AS opening_date,
+            b.type AS type,
+            p.name AS product_name,
+            p.cost AS cost,
+            c.name AS category_name,
+            c.type AS category_type,
+            bs.quantity AS quantity
+        
+            FROM
+                Region r
+            FULL JOIN
+                City ON r.id = city.region_id
+            FULL JOIN
+                Branch b ON city.id = b.city_id
+            FULL JOIN
+                Branch_Stock bs ON b.id = bs.branch_id
+            FULL JOIN
+                Product p ON bs.product_id = p.id
+            FULL JOIN
+                Category c ON p.category_id = c.id
+            WHERE
+                r.admin_id = %s
+            ORDER BY city.name, b.name;
+                   """,(admin_id))
+            
+    rows = cursor.fetchall()  
+    for row in rows:
+        tree.insert("", tk.END, values=row)
+    cursor.close()
+    conn.close()
+    
     
 def branch_stock_menu(admin_id):
     branch_stock_window = CTkToplevel(main_menu)
@@ -32,7 +129,7 @@ def branch_stock_menu(admin_id):
     branch_stock_window.title("Branch Stock")
     branch_stock_window.geometry("1400x550")
     branch_stock_window.resizable(False, False)
-    center_window(branch_stock_window, 1400, 550)
+    center_window(branch_stock_window, 1200, 550)
     
     conn = get_connection()
     cursor = conn.cursor()
@@ -74,7 +171,27 @@ def branch_stock_menu(admin_id):
 
 def show_branch_stock_table(admin_id):
     rows, columns, branch_stock_window = branch_stock_menu(admin_id)
-    style = ttk.Style(branch_stock_window)
+    top_frame = CTkFrame(master=branch_stock_window, border_width=1, border_color='white', height=100, corner_radius=0)
+    top_frame.pack_propagate(False)  # Top frame içeriğine göre boyutunu ayarlamaz
+    top_frame.pack(side="top", fill=BOTH, expand=True)
+    
+    cities = fetch_city_names(admin_id) # kategori isim listesi
+    city_var = StringVar(value=cities[0])
+    category_name_label = CTkLabel(top_frame, text="Select City = ", font=FONT)
+    category_name_label.place(x=200, y=40)
+    caretory_optionmenu = CTkOptionMenu(top_frame, values=cities, variable=city_var, width=200)
+    caretory_optionmenu.place(x=330, y=40)
+    
+    reset_button = CTkButton(top_frame, text='Reset', fg_color=button_color, command=lambda: reset_branch_table(tree, admin_id), hover=False, font=FONT, border_width=2, border_color="white", width=200, height=40)
+    reset_button.place(x=600, y=33)
+    
+    apply_button = CTkButton(top_frame, text='Apply', fg_color=button_color, command=lambda: fetch_selected_city_table(tree, city_var, admin_id), hover=False, font=FONT, border_width=2, border_color="white", width=200, height=40)
+    apply_button.place(x=815, y=33)
+    
+    bot_frame = CTkFrame(master=branch_stock_window, border_width=1, border_color='white', height=450, corner_radius=0)
+    bot_frame.pack_propagate(False)
+    bot_frame.pack(side="bottom", fill=BOTH, expand=True)
+    style = ttk.Style(bot_frame)
     style.theme_use("clam")
     style.configure(
         "Treeview", #hangi ttk widget'ına işlem yapılacağının belirtilmesi
@@ -85,7 +202,7 @@ def show_branch_stock_table(admin_id):
     )
     style.map("Treeview", background=[("selected", "#6BF62D")])
 
-    frame = ttk.Frame(branch_stock_window)
+    frame = ttk.Frame(bot_frame)
     frame.pack(fill="both", expand=True, padx=20, pady=20) 
 
     x_scroll = ttk.Scrollbar(frame, orient="horizontal")
@@ -101,7 +218,7 @@ def show_branch_stock_table(admin_id):
     for col in columns: 
         tree.heading(col, text=col) 
         tree.column(col, anchor="center", width=100) 
-
+        
     x_scroll.config(command=tree.xview)
     y_scroll.config(command=tree.yview)
 
@@ -112,6 +229,8 @@ def show_branch_stock_table(admin_id):
         tree.insert("", tk.END, values=row)
 
     tree.pack(fill="both", expand=True)
+    
+
             
 def region_stock_menu(admin_id):
     region_stock_window = CTkToplevel(main_menu)
