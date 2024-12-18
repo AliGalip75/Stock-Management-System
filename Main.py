@@ -404,7 +404,7 @@ def add_new_product(name, category, category_type, quantity, cost, tree, admin_i
 
 
     
-def clear_add_product_form(name, stock, cost):
+def clear_form(name, stock, cost):
         name.delete(0, tk.END)
         stock.delete(0, tk.END)
         cost.delete(0, tk.END)
@@ -459,7 +459,7 @@ def add_product(admin_id):
     cost_entry = CTkEntry(left_frame, width=200)
     cost_entry.place(x=190, y=390)
     
-    cancel_button = CTkButton(left_frame, text="Reset", command=lambda: clear_add_product_form(product_name_entry, product_stock_entry, cost_entry), fg_color=button_color, hover=False, font=('Arial',17), border_width=2, border_color="white", width=150)
+    cancel_button = CTkButton(left_frame, text="Reset", command=lambda: clear_form(product_name_entry, product_stock_entry, cost_entry), fg_color=button_color, hover=False, font=('Arial',17), border_width=2, border_color="white", width=150)
     cancel_button.place(x=40, y=480)
     
     cancel_button = CTkButton(left_frame, text="Add", fg_color=button_color, hover=False, font=('Arial',17), border_width=2, border_color="white", width=150, command=lambda: add_new_product(
@@ -565,18 +565,20 @@ def add_product(admin_id):
     
 #--------------------------------------------------------------------------------------------------------------
         
-def update_product(admin_id):
+def update_product_window(admin_id):
     update_product_window = CTkToplevel(main_menu)
     update_product_window.title("Update Product")
-    update_product_window.geometry("1500x450")
+    update_product_window.geometry("1500x550")
     update_product_window.resizable(False, False)
-    center_window(update_product_window, 1500, 450)
+    center_window(update_product_window, 1500, 550)
     update_product_window.transient(main_menu)
     
     left_frame = CTkFrame(master=update_product_window, width=450, border_width=1, border_color='white', corner_radius=0)
     left_frame.pack(side="left", fill="y")
     right_frame = CTkFrame(master=update_product_window, width=1050, border_width=1, border_color='white', corner_radius=0)
     right_frame.pack(side="right", fill="y")
+    
+    product_id_entry = CTkEntry(left_frame)
     
     product_name_label = CTkLabel(left_frame, text="Product Name = ", font=FONT)
     product_name_label.place(x=20, y=30)
@@ -607,6 +609,12 @@ def update_product(admin_id):
     cost_entry = CTkEntry(left_frame, width=200)
     cost_entry.place(x=190, y=390)
     
+    reset_button = CTkButton(left_frame, text="Reset", fg_color=button_color, command=lambda: clear_form(product_name_entry, product_stock_entry, cost_entry), hover=False, font=FONT, border_width=2, border_color="white")
+    reset_button.place(x=50, y=480)
+    
+    update_button = CTkButton(left_frame, text="Update", fg_color=button_color, command=lambda: update_product(int(product_id_entry.get()), product_name_entry.get(), int(cost_entry.get()), int(product_stock_entry.get()), category_var.get(), types_var.get(), admin_id, tree),hover=False, font=FONT, border_width=2, border_color="white")
+    update_button.place(x=230, y=480)
+    
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -623,6 +631,7 @@ def update_product(admin_id):
     JOIN Category c ON p.category_id = c.id
     JOIN Region r ON rs.region_id = r.id
     WHERE r.admin_id = %s
+    ORDER BY id;
         """, (admin_id,))
 
     rows = cursor.fetchall()  # Veriyi al örn: rows = [(1, "Ali", 25),(2, "Fatih", 30)]
@@ -643,20 +652,19 @@ def update_product(admin_id):
     frame = CTkFrame(right_frame, width=1050)
     frame.pack(fill="both", expand=True, padx=20, pady=20)  
     
-    #Tablo için kaydırma çubukları
     x_scroll = ttk.Scrollbar(frame, orient="horizontal")
     y_scroll = ttk.Scrollbar(frame, orient="vertical")
         
-    #Tabloyu oluştur
+    # Tabloyu oluştur
     tree = ttk.Treeview(
         frame, 
         columns=columns, 
-        show="headings", #ilk satırda sütun isimlerini göster
+        show="headings", # ilk satırda sütun isimlerini göster
         xscrollcommand=x_scroll.set, 
         yscrollcommand=y_scroll.set,
     )
     
-    for col in columns: #tablodaki kolonlara isim ver
+    for col in columns: # Tablodaki kolonlara isim ver
         tree.heading(col, text=col)
         
     tree.column(columns[0], anchor="center", width=90)
@@ -666,11 +674,9 @@ def update_product(admin_id):
     tree.column(columns[4], anchor="center", width=200)
     tree.column(columns[5], anchor="center", width=200)
     
-    # Kaydırma çubuklarını bağlayın
     x_scroll.config(command=tree.xview)
     y_scroll.config(command=tree.yview)
 
-    # Kaydırma çubuklarını yerleştirin
     x_scroll.pack(side="bottom", fill="x")
     y_scroll.pack(side="right", fill="y")
 
@@ -678,15 +684,17 @@ def update_product(admin_id):
     for row in rows:
         tree.insert("", tk.END, values=row)
 
-    # Tabloyu yerleştir
     tree.pack(fill="both", expand=True)
-    
     def on_double_click(event):
         # Seçilen öğeyi al
         item_id = tree.focus()
         selected_item = tree.item(item_id, "values")  # Seçili satırın tüm değerleri
         
         if selected_item:  # Eğer bir satır seçildiyse
+            
+            product_id_entry.delete(0, tk.END)
+            product_id_entry.insert(0, selected_item[0])
+            
             product_name_entry.delete(0, tk.END)
             product_name_entry.insert(0, selected_item[1])  # Product Name
             
@@ -699,14 +707,75 @@ def update_product(admin_id):
             cost_entry.delete(0, tk.END)
             cost_entry.insert(0, selected_item[2])  # Cost
     
-    # Çift tıklama olayını bağla
+    # Çift tıklama olayı
     tree.bind("<Double-1>", on_double_click)
     
     def on_category_change(*args):
         update_types_menu(category_var, type_optionmenu, types_var)
 
     category_var.trace("w", on_category_change)
+    
+def update_product(product_id, product_name, product_cost, quantity, category_name, category_type, admin_id, tree):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+    
+        cursor.execute("""
+        UPDATE Product
+        SET name = %s,
+            cost = %s,
+            category_id = (SELECT id FROM Category WHERE name=%s AND type=%s)
+        WHERE id = %s;
+        """, (product_name, product_cost, category_name, category_type, product_id))
+        
+        cursor.execute("""
+                    UPDATE Region_Stock
+                    SET quantity = %s
+                    WHERE product_id = %s AND region_id = (SELECT id FROM Region WHERE admin_id=%s)
+                    """, (quantity, product_id, admin_id))
+        conn.commit()
+        for notice in conn.notices:
+            messagebox.showwarning("Stock Warning", notice.strip())
+       
+    except Exception as e:
+        messagebox.showerror("Error", f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+        messagebox.showinfo("Success", "Product updated successfully!")
+    
+    cursor.close()
+    conn.close()
+    reset_update_product_table(tree, admin_id)
+    
+    
+def reset_update_product_table(tree, admin_id):
+    tree.delete(*tree.get_children())
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT 
+        p.id, 
+        p.name, 
+        p.cost, 
+        rs.quantity AS stock, 
+        c.name AS category_name, 
+        c.type AS category_type
+    FROM Product p
+    JOIN Region_Stock rs ON rs.product_id = p.id
+    JOIN Category c ON p.category_id = c.id
+    JOIN Region r ON rs.region_id = r.id
+    WHERE r.admin_id = %s
+    ORDER BY id;
+        """, (admin_id,))
+            
+    rows = cursor.fetchall()  
+    for row in rows:
+        tree.insert("", tk.END, values=row)
+    cursor.close()
+    conn.close()
 
+#-----------------------------------------------------------------------------------------------------
     
 def change_password(admin_id):
     def validate_form():
@@ -924,7 +993,7 @@ def open_main_menu(username, admin_id):# Ana Menu
     button_supply_product = CTkButton(right_frame, text='Supply Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_supply_product.grid(row=1, column=0, ipadx=5, ipady=15)
     
-    button_update_product = CTkButton(right_frame, text='Update Product', command=lambda: update_product(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
+    button_update_product = CTkButton(right_frame, text='Update Product', command=lambda: update_product_window(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_update_product.grid(row=1, column=1, ipadx=5, ipady=15)
     
     button_add_product = CTkButton(right_frame, text='Change password',command= lambda: change_password(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
