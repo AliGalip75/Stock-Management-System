@@ -87,34 +87,8 @@ def reset_branch_table(tree, admin_id):
     tree.delete(*tree.get_children())
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(""" SELECT
-            r.name AS region_name,
-            City.name AS city_name,
-            b.name AS branch_name,
-            b.opening_date AS opening_date,
-            b.type AS type,
-            p.name AS product_name,
-            p.cost AS cost,
-            c.name AS category_name,
-            c.type AS category_type,
-            bs.quantity AS quantity
-        
-            FROM
-                Region r
-            FULL JOIN
-                City ON r.id = city.region_id
-            FULL JOIN
-                Branch b ON city.id = b.city_id
-            FULL JOIN
-                Branch_Stock bs ON b.id = bs.branch_id
-            FULL JOIN
-                Product p ON bs.product_id = p.id
-            FULL JOIN
-                Category c ON p.category_id = c.id
-            WHERE
-                r.admin_id = %s
-            ORDER BY city.name, b.name;
-                   """,(admin_id))
+                   
+    cursor.execute("SELECT * FROM fetch_branch_data(%s);", (admin_id,)) #branch tablosundaki verileri getiren fonksiyon
             
     rows = cursor.fetchall()  
     for row in rows:
@@ -195,33 +169,7 @@ def branch_stock_menu(admin_id):
     conn = get_connection()
     cursor = conn.cursor()
     
-    cursor.execute("""SELECT
-            r.name AS region_name,
-            City.name AS city_name,
-            b.name AS branch_name,
-            b.opening_date AS opening_date,
-            b.type AS type,
-            p.name AS product_name,
-            p.cost AS cost,
-            c.name AS category_name,
-            c.type AS category_type,
-            bs.quantity AS quantity
-        
-            FROM
-                Region r
-            FULL JOIN
-                City ON r.id = city.region_id
-            FULL JOIN
-                Branch b ON city.id = b.city_id
-            FULL JOIN
-                Branch_Stock bs ON b.id = bs.branch_id
-            FULL JOIN
-                Product p ON bs.product_id = p.id
-            FULL JOIN
-                Category c ON p.category_id = c.id
-            WHERE
-                r.admin_id = %s
-            ORDER BY city.name, b.name;""", (admin_id,))
+    cursor.execute("SELECT * FROM fetch_branch_data(%s);", (admin_id,))
             
     rows = cursor.fetchall()
     columns = [desc[0] for desc in cursor.description]        
@@ -299,8 +247,14 @@ def show_region_stock_table(admin_id):
         yscrollcommand=y_scroll.set,
     )
     for col in columns: 
-        tree.heading(col, text=col) #sorgudan gelen kolon isimlerini değiştirebiliriz fakat burda aynı bıraktık
         tree.column(col, anchor="center", width=100) #kolondaki değerin hizalanması
+        
+    tree.heading(columns[0], text="Region Name")
+    tree.heading(columns[1], text="Product Name")
+    tree.heading(columns[2], text="Product Cost")
+    tree.heading(columns[3], text="Category Name")
+    tree.heading(columns[4], text="Category Type")
+    tree.heading(columns[5], text="Quantity")
 
     # Kaydırma çubuklarını bağlayın
     x_scroll.config(command=tree.xview)
@@ -532,14 +486,14 @@ def add_product(admin_id):
         yscrollcommand=y_scroll.set,
     )
     for col in columns: 
-        tree.column(col, anchor="center", width=200,) #kolondaki değerin hizalanması
+        tree.column(col, anchor="center", width=200) #kolondaki değerin hizalanması
         
-    tree.heading("product_id", text="Product Id")
-    tree.heading("product_name", text="Product Name")
-    tree.heading("product_cost", text="Product Cost")
-    tree.heading("id", text="Category Id")
-    tree.heading("category_name", text="Category Name")
-    tree.heading("category_type", text="Category Type")
+    tree.heading(columns[0], text="Product ID")
+    tree.heading(columns[1], text="Product Name")
+    tree.heading(columns[2], text="Product Cost")
+    tree.heading(columns[3], text="Category ID")
+    tree.heading(columns[4], text="Category Name")
+    tree.heading(columns[5], text="Category Type")
     
     tree.column("product_id", anchor="center", width=100,)
     tree.column("product_name", anchor="center", width=200,)
@@ -612,27 +566,13 @@ def update_product_window(admin_id):
     reset_button = CTkButton(left_frame, text="Reset", fg_color=button_color, command=lambda: clear_form(product_name_entry, product_stock_entry, cost_entry), hover=False, font=FONT, border_width=2, border_color="white")
     reset_button.place(x=50, y=480)
     
-    update_button = CTkButton(left_frame, text="Update", fg_color=button_color, command=lambda: update_product(int(product_id_entry.get()), product_name_entry.get(), int(cost_entry.get()), int(product_stock_entry.get()), category_var.get(), types_var.get(), admin_id, tree),hover=False, font=FONT, border_width=2, border_color="white")
+    update_button = CTkButton(left_frame, text="Update", fg_color=button_color, command=lambda: update_product(product_id_entry.get(), product_name_entry.get(), cost_entry.get(), product_stock_entry.get(), category_var.get(), types_var.get(), admin_id, tree),hover=False, font=FONT, border_width=2, border_color="white")
     update_button.place(x=230, y=480)
     
     conn = get_connection()
     cursor = conn.cursor()
-    
-    cursor.execute("""
-    SELECT 
-        p.id, 
-        p.name, 
-        p.cost, 
-        rs.quantity AS stock, 
-        c.name AS category_name, 
-        c.type AS category_type
-    FROM Product p
-    JOIN Region_Stock rs ON rs.product_id = p.id
-    JOIN Category c ON p.category_id = c.id
-    JOIN Region r ON rs.region_id = r.id
-    WHERE r.admin_id = %s
-    ORDER BY id;
-        """, (admin_id,))
+        
+    cursor.execute("SELECT * FROM fetch_region_product_data(%s)",(admin_id)) #product_update tablosu
 
     rows = cursor.fetchall()  # Veriyi al örn: rows = [(1, "Ali", 25),(2, "Fatih", 30)]
     columns = [desc[0] for desc in cursor.description]  # Sütun adlarını al örn: columns = ['id', 'name', 'age']
@@ -663,9 +603,13 @@ def update_product_window(admin_id):
         xscrollcommand=x_scroll.set, 
         yscrollcommand=y_scroll.set,
     )
-    
-    for col in columns: # Tablodaki kolonlara isim ver
-        tree.heading(col, text=col)
+        
+    tree.heading(columns[0], text="Product ID")
+    tree.heading(columns[1], text="Product Name")
+    tree.heading(columns[2], text="Product Cost")
+    tree.heading(columns[3], text="Quantity")
+    tree.heading(columns[4], text="Category Name")
+    tree.heading(columns[5], text="Category Type")
         
     tree.column(columns[0], anchor="center", width=90)
     tree.column(columns[1], anchor="center", width=180)
@@ -716,7 +660,14 @@ def update_product_window(admin_id):
     category_var.trace("w", on_category_change)
     
 def update_product(product_id, product_name, product_cost, quantity, category_name, category_type, admin_id, tree):
+    if not (product_id and product_name and product_cost and quantity and category_name and category_type):
+        messagebox.showerror("Error", "Please fill all the fields")
+        return
     try:
+        product_id = int(product_id)
+        product_cost = int(product_cost)
+        quantity = int(quantity)
+        
         conn = get_connection()
         cursor = conn.cursor()
     
@@ -734,18 +685,13 @@ def update_product(product_id, product_name, product_cost, quantity, category_na
                     WHERE product_id = %s AND region_id = (SELECT id FROM Region WHERE admin_id=%s)
                     """, (quantity, product_id, admin_id))
         conn.commit()
-        for notice in conn.notices:
-            messagebox.showwarning("Stock Warning", notice.strip())
-       
+        messagebox.showinfo("Success", "Product updated successfully!")
     except Exception as e:
-        messagebox.showerror("Error", f"Error: {e}")
+        error_message = str(e).split("CONTEXT")[0].strip()
+        messagebox.showerror("Error", f"Error: {error_message}")
     finally:
         cursor.close()
         conn.close()
-        messagebox.showinfo("Success", "Product updated successfully!")
-    
-    cursor.close()
-    conn.close()
     reset_update_product_table(tree, admin_id)
     
     
@@ -753,21 +699,8 @@ def reset_update_product_table(tree, admin_id):
     tree.delete(*tree.get_children())
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-    SELECT 
-        p.id, 
-        p.name, 
-        p.cost, 
-        rs.quantity AS stock, 
-        c.name AS category_name, 
-        c.type AS category_type
-    FROM Product p
-    JOIN Region_Stock rs ON rs.product_id = p.id
-    JOIN Category c ON p.category_id = c.id
-    JOIN Region r ON rs.region_id = r.id
-    WHERE r.admin_id = %s
-    ORDER BY id;
-        """, (admin_id,))
+        
+    cursor.execute("SELECT * FROM fetch_region_product_data(%s)",(admin_id)) #product_update tablosu
             
     rows = cursor.fetchall()  
     for row in rows:
@@ -892,7 +825,7 @@ def login(username, password, error, login_window):
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM admin WHERE username=%s AND password=%s", (username, password,))
     admin_id = cursor.fetchone()
-    
+    print(type(admin_id[0]))
     conn.close()
     
     if validate_user(username, password):
