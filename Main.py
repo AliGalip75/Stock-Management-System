@@ -4,6 +4,7 @@ import tkinter as tk
 import psycopg2
 from PIL import Image
 from tkinter import messagebox
+from custom_widgets import CustomListbox
     
 def destroy_program(): # Login penceresi kapanırsa program da kapansın
     main_menu.destroy()
@@ -40,6 +41,15 @@ def fetch_city_names(admin_id):
     cities = [row[0] for row in cur.fetchall()]
     conn.close()
     return cities
+
+def fetch_branch_names(city_var):
+    conn = get_connection()
+    cursor = conn.cursor()
+    selected_city = city_var.get()
+    cursor.execute("SELECT name FROM Branch WHERE city_id=(SELECT id FROM City WHERE name=%s)",(selected_city,))
+    branches = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return branches
 
 def fetch_selected_city_table(tree, city_var, admin_id):
     
@@ -190,25 +200,8 @@ def region_stock_menu(admin_id):
     
     conn = get_connection()
     cursor = conn.cursor()
-            
-    cursor.execute("""SELECT 
-            r.name AS region_name,
-            p.name AS product_name,
-            p.cost AS product_cost,
-            c.name AS category_name,
-            c.type AS category_type,
-            rs.quantity AS quantity
-            FROM 
-                Region r
-            FULL JOIN 
-                Region_Stock rs ON r.id = rs.region_id
-            FULL JOIN 
-                Product p ON rs.product_id = p.id
-            FULL JOIN 
-                Category c ON p.category_id = c.id
-            WHERE 
-                r.admin_id = %s
-            ORDER BY c.name, c.type;""", (admin_id,))
+
+    cursor.execute("SELECT * FROM get_region_stock_data(%s);", (admin_id))
             
     rows = cursor.fetchall()  # Veriyi al örn: rows = [(1, "Ali", 25),(2, "Fatih", 30)]
     columns = [desc[0] for desc in cursor.description]  # Sütun adlarını al örn: columns = ['id', 'name', 'age']
@@ -284,10 +277,10 @@ def fetch_category_names(): # kategori adlarını dizi şeklinde döndürür
 
 def fetch_category_types(category_var):
     conn = get_connection()
-    cur = conn.cursor()
+    cursor = conn.cursor()
     selected_category = category_var.get()
-    cur.execute("SELECT DISTINCT type FROM Category WHERE name=%s",(selected_category,))
-    types = [row[0] for row in cur.fetchall()]
+    cursor.execute("SELECT DISTINCT type FROM Category WHERE name=%s",(selected_category,))
+    types = [row[0] for row in cursor.fetchall()]
     conn.close()
     return types
 
@@ -707,6 +700,185 @@ def reset_update_product_table(tree, admin_id):
         tree.insert("", tk.END, values=row)
     cursor.close()
     conn.close()
+#-----------------------------------------------------------------------------------------------------
+
+def update_branches_menu(city_var, branch_optionmenu, branch_var):
+    branches = fetch_branch_names(city_var)  # Yeni türleri al
+    if len(branches) > 0:
+        branch_var.set(branches[0])
+        branch_optionmenu.configure(values=branches)
+    else:
+        branch_var.set("")
+        branch_optionmenu.configure(values=[])
+
+def supply_product_window(admin_id):
+    supply_product_window = CTkToplevel(main_menu)
+    supply_product_window.title("supply Product")
+    supply_product_window.geometry("1500x700")
+    supply_product_window.resizable(False, False)
+    center_window(supply_product_window, 1500, 700)
+    supply_product_window.transient(main_menu)
+    
+    left_frame = CTkFrame(master=supply_product_window, width=1000, border_width=1, border_color='white', corner_radius=0)
+    left_frame.pack(side="left", fill="y")
+    right_frame = CTkFrame(master=supply_product_window, width=500, border_width=1, border_color='white', corner_radius=0)
+    right_frame.pack(side="right", fill="y")
+    
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM get_region_stock_data(%s);", (admin_id))
+    rows = cursor.fetchall()  # Veriyi al örn: rows = [(1, "Ali", 25),(2, "Fatih", 30)]
+    columns = [desc[0] for desc in cursor.description]  # Sütun adlarını al örn: columns = ['id', 'name', 'age']
+    
+    style = ttk.Style(supply_product_window)
+    style.theme_use("clam")
+    style.configure(
+        "Treeview", #hangi ttk widget'ına işlem yapılacağının belirtilmesi
+        font=("Arial", 12),
+        foreground="#fff", #tablodaki değerlerin rengi
+        background="#000", #tablonun arka plan rengi
+        fieldbackground="#313837",
+    )
+    style.map("Treeview", background=[("selected", "#6BF62D")]) #imleçle üzerine gelindiğinde gerçekleşecek işlem
+
+    #Çerçeve oluştur ve tabloyu içine yerleştir
+    frame = ttk.Frame(left_frame)
+    frame.pack(fill="both", expand=True, padx=20, pady=20)  # Çerçeveye boşluk ekle
+
+    #Tablo için kaydırma çubukları
+    x_scroll = ttk.Scrollbar(frame, orient="horizontal")
+    y_scroll = ttk.Scrollbar(frame, orient="vertical")
+    
+    #Tabloyu oluştur
+    tree = ttk.Treeview(
+        frame, 
+        columns=columns, 
+        show="headings", #ilk satırda sütun isimlerini göster
+        xscrollcommand=x_scroll.set, 
+        yscrollcommand=y_scroll.set,
+    )
+        
+    tree.column(columns[0], anchor="center", width=130)
+    tree.column(columns[1], anchor="center", width=70)
+    tree.column(columns[2], anchor="center", width=180)
+    tree.column(columns[3], anchor="center", width=120)
+    tree.column(columns[4], anchor="center", width=200)
+    tree.column(columns[5], anchor="center", width=200)
+    tree.column(columns[5], anchor="center", width=150)
+    tree.column(columns[6], anchor="center", width=100)
+    
+        
+    tree.heading(columns[0], text="Region Name")
+    tree.heading(columns[1], text="Product ID")
+    tree.heading(columns[2], text="Product Name")
+    tree.heading(columns[3], text="Product Cost")
+    tree.heading(columns[4], text="Category Name")
+    tree.heading(columns[5], text="Category Type")
+    tree.heading(columns[6], text="Quantity")
+
+    # Kaydırma çubuklarını bağlayın
+    x_scroll.config(command=tree.xview)
+    y_scroll.config(command=tree.yview)
+
+    # Kaydırma çubuklarını yerleştirin
+    x_scroll.pack(side="bottom", fill="x")
+    y_scroll.pack(side="right", fill="y")
+
+    # Verileri tabloya ekle
+    for row in rows:
+        tree.insert("", tk.END, values=row)
+
+    # Tabloyu yerleştir
+    tree.pack(fill="both", expand=True)
+    
+    cursor.execute("SELECT name FROM Region WHERE admin_id=%s", (admin_id,))
+    region_name = cursor.fetchone()
+    region_name_label = CTkLabel(master=right_frame, text=f"{region_name[0].upper()}", font=FONT)
+    region_name_label.place(x=180, y=10)
+    
+    cities = fetch_city_names(admin_id) # kategori isim listesi
+    city_var = StringVar(value=cities[0])
+    city_name_label = CTkLabel(right_frame, text="City = ", font=FONT)
+    city_name_label.place(x=40, y=80)
+    city_optionmenu = CTkOptionMenu(right_frame, values=cities, variable=city_var, width=100)
+    city_optionmenu.place(x=100, y=80)
+    
+    branches = fetch_branch_names(city_var)
+    branch_var = StringVar(value=branches[0])
+    branch_name_label = CTkLabel(right_frame, text="Branch = ", font=FONT)
+    branch_name_label.place(x=260, y=80)
+    branch_optionmenu = CTkOptionMenu(right_frame, values=branches, variable=branch_var, width=100)
+    branch_optionmenu.place(x=350, y=80)
+    
+    def on_city_change(*args):
+        update_branches_menu(city_var, branch_optionmenu, branch_var)
+    city_var.trace("w", on_city_change)
+    
+    
+    listbox = CustomListbox(right_frame, width=390, height=300)
+    listbox.place(x=40, y=150)
+    selected_products = [] #Listbox'a eklenen ürünlerin (id, name, quanitity) şeklinde tutulacağı liste 
+    
+    def on_treeview_double_click(event):
+        selected_item = tree.selection()[0]
+        product_id, product_name, product_quantity = tree.item(selected_item, 'values')[1], tree.item(selected_item, 'values')[2], tree.item(selected_item, 'values')[-1] 
+        add_product_to_list(product_id, product_name, int(product_quantity))
+    tree.bind("<Double-1>", on_treeview_double_click)
+    
+    def add_product_to_list(product_id, product_name, product_quantity):
+        
+        def add_or_update_item(data, new_item):
+            item_id = new_item[0]
+            item_name = new_item[1]
+            item_quantity = new_item[2]
+
+            # Aynı id'ye sahip item varsa, miktarını toplarız
+            for i, item in enumerate(data):
+                if item[0] == item_id:  # Aynı id'ye sahip item bulunduysa
+                    '''new_quantity = item[2] + item_quantity  # Yeni miktar hesaplanır
+                    data[i] = (item_id, item_name, new_quantity)  # Tuple güncellenir
+                    listbox.update_item(i, new_quantity)
+                    return '''
+                    new_quantity = item[2] + item_quantity
+                    if new_quantity <= product_quantity:
+                        data[i] = (item_id, item_name, new_quantity)
+                        listbox.update_item(i, new_quantity)
+                        return
+                    else:
+                        messagebox.showerror("Error", "The requested quantity exceeds the available stock.")
+                        return
+            
+            # Eğer aynı id'ye sahip item bulunmazsa, yeni item'ı listeye ekleriz
+            data.append(new_item)
+            listbox.add_item(product_name, new_item[2])
+            return 
+        
+        def on_confirm_quantity():
+            quantity = quantity_entry.get()
+            if quantity.isdigit() and int(quantity) > 0 and product_quantity >= int(quantity): 
+                add_or_update_item(selected_products, (product_id, product_name, int(quantity)))
+                quantity_window.destroy()
+            else:
+                error_label.configure(text="Please enter a valid quantity!")
+                
+        quantity_window = CTkToplevel(supply_product_window)
+        quantity_window.geometry("300x300")
+        center_window(quantity_window, 250, 200)
+        quantity_window.title("Enter Quantity")
+
+        # Miktar giriş penceresi
+        CTkLabel(quantity_window, text="Quantity:").pack(padx=10, pady=10)
+        quantity_entry = CTkEntry(quantity_window)
+        quantity_entry.pack(padx=10, pady=10)
+
+        error_label = CTkLabel(quantity_window, text="", text_color="red")
+        error_label.pack()
+
+        CTkButton(quantity_window, text="Enter", command=on_confirm_quantity).pack(padx=10, pady=10)
+
+    
 
 #-----------------------------------------------------------------------------------------------------
     
@@ -825,7 +997,6 @@ def login(username, password, error, login_window):
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM admin WHERE username=%s AND password=%s", (username, password,))
     admin_id = cursor.fetchone()
-    print(type(admin_id[0]))
     conn.close()
     
     if validate_user(username, password):
@@ -903,7 +1074,7 @@ def open_main_menu(username, admin_id):# Ana Menu
     
     img = CTkImage(Image.open("user.png"),size=(180, 180))
     imagelabel = CTkButton(left_frame, image=img, text="", fg_color="transparent", hover=False)
-    imagelabel.pack(pady=20)
+    imagelabel.pack(pady=40)
     
     welcome_label = CTkLabel(left_frame, text=f'Welcome, {username}', font=('Arial',17))
     welcome_label.pack()
@@ -923,13 +1094,13 @@ def open_main_menu(username, admin_id):# Ana Menu
     button_add_product = CTkButton(right_frame, text='Add New Product', command=lambda: add_product(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_add_product.grid(row=0, column=2, ipadx=5, ipady=15)
     
-    button_supply_product = CTkButton(right_frame, text='Supply Product', fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
+    button_supply_product = CTkButton(right_frame, text='Supply Product', command=lambda: supply_product_window(admin_id),fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_supply_product.grid(row=1, column=0, ipadx=5, ipady=15)
     
     button_update_product = CTkButton(right_frame, text='Update Product', command=lambda: update_product_window(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_update_product.grid(row=1, column=1, ipadx=5, ipady=15)
     
-    button_add_product = CTkButton(right_frame, text='Change password',command= lambda: change_password(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
+    button_add_product = CTkButton(right_frame, text='Change password',command=lambda: change_password(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_add_product.grid(row=1, column=2, ipadx=5, ipady=15)
     
 
