@@ -5,6 +5,7 @@ import psycopg2
 from PIL import Image
 from tkinter import messagebox
 from custom_widgets import CustomListbox
+from psycopg2 import IntegrityError
     
 def destroy_program(): # Login penceresi kapanırsa program da kapansın
     main_menu.destroy()
@@ -243,11 +244,12 @@ def show_region_stock_table(admin_id):
         tree.column(col, anchor="center", width=100) #kolondaki değerin hizalanması
         
     tree.heading(columns[0], text="Region Name")
-    tree.heading(columns[1], text="Product Name")
-    tree.heading(columns[2], text="Product Cost")
-    tree.heading(columns[3], text="Category Name")
-    tree.heading(columns[4], text="Category Type")
-    tree.heading(columns[5], text="Quantity")
+    tree.heading(columns[1], text="Product ID")
+    tree.heading(columns[2], text="Product Name")
+    tree.heading(columns[3], text="Product Cost")
+    tree.heading(columns[4], text="Category Name")
+    tree.heading(columns[5], text="Category Type")
+    tree.heading(columns[6], text="Quantity")
 
     # Kaydırma çubuklarını bağlayın
     x_scroll.config(command=tree.xview)
@@ -710,13 +712,60 @@ def update_branches_menu(city_var, branch_optionmenu, branch_var):
     else:
         branch_var.set("")
         branch_optionmenu.configure(values=[])
+        
+def supply_products(admin_id, current_branch_name, selected_products):
+    
+    try:
+        # branch_id'yi almak için sorgu
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM Branch WHERE name = %s", (current_branch_name,))
+        branch_id= cursor.fetchone()
+        
+        cursor.execute("SELECT id FROM Region WHERE admin_id = %s", (admin_id,))
+        region_id = cursor.fetchone()
+        
+        if branch_id and region_id:
+            branch_id = branch_id[0]
+            region_id = region_id[0]
+            
+            # Ürünleri branch_stock tablosuna ekleme/güncelleme
+            for product_id, product_name, product_quantity in selected_products:
+                cursor.execute(
+                    """
+                    INSERT INTO branch_stock (branch_id, product_id, quantity)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (branch_id, product_id)
+                    DO UPDATE SET quantity = branch_stock.quantity + EXCLUDED.quantity
+                    """,
+                    (branch_id, product_id, product_quantity)
+                )
+                
+                cursor.execute(
+                    """
+                    UPDATE Region_Stock
+                    SET quantity = quantity - %s
+                    WHERE region_id = %s AND product_id = %s
+                    """,
+                    (product_quantity, region_id, product_id)
+                )
+            conn.commit()
+            messagebox.showinfo("Success", "The supply process was completed successfully")
+        else:
+            print(f"'{current_branch_name}' could not be found")
+    except Exception as e:
+        print(f"Error: {e}")
+        conn.rollback()
+    finally:
+        cursor.close()
+        conn.close()
 
 def supply_product_window(admin_id):
     supply_product_window = CTkToplevel(main_menu)
     supply_product_window.title("supply Product")
-    supply_product_window.geometry("1500x700")
+    supply_product_window.geometry("1500x600")
     supply_product_window.resizable(False, False)
-    center_window(supply_product_window, 1500, 700)
+    center_window(supply_product_window, 1500, 600)
     supply_product_window.transient(main_menu)
     
     left_frame = CTkFrame(master=supply_product_window, width=1000, border_width=1, border_color='white', corner_radius=0)
@@ -817,9 +866,19 @@ def supply_product_window(admin_id):
     city_var.trace("w", on_city_change)
     
     
+    def clear_listbox():
+        listbox.clear_items()
+        selected_products.clear()
+    
     listbox = CustomListbox(right_frame, width=390, height=300)
     listbox.place(x=40, y=150)
     selected_products = [] #Listbox'a eklenen ürünlerin (id, name, quanitity) şeklinde tutulacağı liste 
+    
+    reset_button = CTkButton(right_frame, text="Reset", command=lambda: clear_listbox(), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200)
+    reset_button.place(x=40, y=500)
+    
+    supply_button = CTkButton(right_frame, text="Supply", command=lambda: supply_products(admin_id, branch_var.get(), selected_products), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200)
+    supply_button.place(x=250, y=500)
     
     def on_treeview_double_click(event):
         selected_item = tree.selection()[0]
@@ -837,10 +896,6 @@ def supply_product_window(admin_id):
             # Aynı id'ye sahip item varsa, miktarını toplarız
             for i, item in enumerate(data):
                 if item[0] == item_id:  # Aynı id'ye sahip item bulunduysa
-                    '''new_quantity = item[2] + item_quantity  # Yeni miktar hesaplanır
-                    data[i] = (item_id, item_name, new_quantity)  # Tuple güncellenir
-                    listbox.update_item(i, new_quantity)
-                    return '''
                     new_quantity = item[2] + item_quantity
                     if new_quantity <= product_quantity:
                         data[i] = (item_id, item_name, new_quantity)
@@ -877,9 +932,7 @@ def supply_product_window(admin_id):
         error_label.pack()
 
         CTkButton(quantity_window, text="Enter", command=on_confirm_quantity).pack(padx=10, pady=10)
-
     
-
 #-----------------------------------------------------------------------------------------------------
     
 def change_password(admin_id):
@@ -1001,7 +1054,7 @@ def login(username, password, error, login_window):
     
     if validate_user(username, password):
         login_window.destroy()
-        open_main_menu(username, admin_id)  
+        open_admin_menu(username, admin_id)  
     else:
         error.configure(text="Username or password is incorrect.")
 
@@ -1048,24 +1101,24 @@ def select_option_window(): #ilk menü
     
     select_option_window.protocol("WM_DELETE_WINDOW", destroy_program) # ilk menü kapanırsa programı kapat
       
-    customer_login_button = CTkButton(select_option_window, text="Customer Login", fg_color=button_color, hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white")
+    customer_login_button = CTkButton(select_option_window, text="Customer Login", fg_color=button_color, command=lambda: customer_select_window(select_option_window), hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white", width=180, height=80)
     
-    admin_login_button = CTkButton(select_option_window, text="Admin Login", fg_color=button_color,  command=lambda: control(select_option_window),hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white")
+    admin_login_button = CTkButton(select_option_window, text="Admin Login", fg_color=button_color, command=lambda: admin_login(select_option_window),hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white", width=180, height=80)
     
     select_option_window.columnconfigure(0, weight=1)
     select_option_window.rowconfigure(0, weight=1)
     select_option_window.rowconfigure(1, weight=1)
     
     customer_login_button.grid(row=0, column=0, ipadx=20, ipady=30)
-    admin_login_button.grid(row=1, column=0, ipadx=32, ipady=30)
+    admin_login_button.grid(row=1, column=0, ipadx=20, ipady=30)
     
-def control(select_option_window): 
+def admin_login(select_option_window): 
     select_option_window.destroy()# control
     login_menu()
     
 #---------------------------------------------------------------------------------------------------
 
-def open_main_menu(username, admin_id):# Ana Menu
+def open_admin_menu(username, admin_id):# Ana Menu
     main_menu.deiconify()# Ana menü penceresini tekrar görünür hale getir
     left_frame = CTkFrame(master=main_menu, border_width=1, border_color='white', width=280, corner_radius=0)
     left_frame.pack(side='left', fill=BOTH, expand=True)
@@ -1102,8 +1155,108 @@ def open_main_menu(username, admin_id):# Ana Menu
     
     button_add_product = CTkButton(right_frame, text='Change password',command=lambda: change_password(admin_id), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=200) 
     button_add_product.grid(row=1, column=2, ipadx=5, ipady=15)
-    
 
+#--------------------------------------------------------------------------------------------------------------
+def customer_select_window(select_option_window):
+    select_option_window.destroy()
+    customer_select_window = CTkToplevel(main_menu)
+    customer_select_window.title("Customer")
+    customer_select_window.geometry("350x450")
+    customer_select_window.resizable(False, False)
+    center_window(customer_select_window, 350, 450)
+    
+    customer_select_window.protocol("WM_DELETE_WINDOW", destroy_program) # ilk menü kapanırsa programı kapat
+      
+    login_button = CTkButton(customer_select_window, text="Login", fg_color=button_color, hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white", width=180, height=80)
+    
+    register_button = CTkButton(customer_select_window, text="Register", fg_color=button_color, command=lambda: customer_register(customer_select_window), hover=False, font=FONT, corner_radius=20, border_width=2, border_color="white", width=180, height=80)
+    
+    customer_select_window.columnconfigure(0, weight=1)
+    customer_select_window.rowconfigure(0, weight=1)
+    customer_select_window.rowconfigure(1, weight=1)
+    
+    login_button.grid(row=0, column=0, ipadx=20, ipady=30)
+    register_button.grid(row=1, column=0, ipadx=20, ipady=30)
+    
+    customer_select_window.protocol("WM_DELETE_WINDOW", destroy_program)
+    
+def customer_register(customer_select_window):
+    customer_select_window.withdraw()
+    customer_register_window = CTkToplevel(main_menu)
+    customer_register_window.title("Register")
+    customer_register_window.geometry("800x400")
+    customer_register_window.resizable(False, False)
+    center_window(customer_register_window, 800, 400)
+    
+    username_label = CTkLabel(master=customer_register_window, text="Username", font=FONT)
+    username_label.place(x=40, y=70)
+    username_entry = CTkEntry(master=customer_register_window, width=200)
+    username_entry.place(x=150, y=70)
+    
+    password_label = CTkLabel(customer_register_window, text="Password", font=FONT)
+    password_label.place(x=40, y=180)
+    password_entry = CTkEntry(customer_register_window, width=200)
+    password_entry.place(x=150, y=180)
+    
+    TC_label = CTkLabel(customer_register_window, text="TC", font=FONT)
+    TC_label.place(x=40, y=290)
+    TC_entry = CTkEntry(customer_register_window, width=200)
+    TC_entry.place(x=150, y=290)
+    
+    Email_label = CTkLabel(customer_register_window, text="Email", font=FONT)
+    Email_label.place(x=450, y=70)
+    Email_entry = CTkEntry(customer_register_window, width=200)
+    Email_entry.place(x=520, y=70)
+    
+    def get_cities():
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""SELECT name FROM City ORDER BY name ASC""")
+        cities = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return cities
+    
+    cities = get_cities() # kategori isim listesi
+    city_var = StringVar(value=cities[0])
+    city_name_label = CTkLabel(customer_register_window, text="City", font=FONT)
+    city_name_label.place(x=450, y=180)
+    city_optionmenu = CTkOptionMenu(customer_register_window, values=cities, variable=city_var, width=200)
+    city_optionmenu.place(x=520, y=180)
+    
+    def go_select_window():
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                       INSERT INTO customer (username, password, TC, email, city)
+                       VALUES (%s, %s, %s, %s, %s);
+                       """, (username_entry.get(), password_entry.get(), TC_entry.get(), Email_entry.get(), city_var.get()))
+            conn.commit()
+            messagebox.showinfo("Success", "Your account has been successfully created")
+            customer_register_window.destroy()
+            customer_select_window.deiconify()
+        except IntegrityError as e:
+            if 'duplicate key value violates unique constraint' in str(e):
+                if 'customer_tc_key' in str(e): 
+                    messagebox.showerror("Error", "This TC number is already registered")
+                elif 'customer_email_key' in str(e):  
+                    messagebox.showerror("Error", "This email address is already in use")
+                elif 'customer_username_key' in str(e):
+                    messagebox.showerror("Error", "This username is already in use")
+                elif 'customer_password_key' in str(e):
+                    messagebox.showerror("Error", "This password is already in use")
+            else:
+                print("An unexpected error occurred:", e)
+        finally:
+            if conn:
+                conn.close()
+        
+    
+    register_button = CTkButton(customer_register_window, text="Register", fg_color=button_color, command=lambda: go_select_window(), hover=False, font=FONT, corner_radius=2, border_width=2, border_color="white", width=150)
+    register_button.place(x=540, y=300)
+    
+    customer_register_window.protocol("WM_DELETE_WINDOW", destroy_program)
+    
 # Başlangıç
 main_menu = CTk()
 main_menu.title("Stock Management System")
@@ -1117,4 +1270,3 @@ set_appearance_mode("dark") # Genel tema
 select_option_window() # Giriş penceresi
 set_default_color_theme("green") # Widget'ların teması
 main_menu.mainloop()
-

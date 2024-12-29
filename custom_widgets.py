@@ -24,5 +24,5 @@ class CustomListbox(CTkScrollableFrame):
 
     def clear_items(self):
         for item in self.items:
-            item.destroy()
+            item[0].destroy()
         self.items.clear()
