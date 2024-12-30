@@ -1197,7 +1197,7 @@ def show_customer_branch_stock(customer_id, customer_menu):
     branch_stock_table.title("Branch Stock")
     branch_stock_table.geometry("600x400")
     branch_stock_table.resizable(False, False)
-    center_window(branch_stock_table, 1000, 600)
+    center_window(branch_stock_table, 1200, 600)
     branch_stock_table.transient(customer_menu)
     
     conn = get_connection()
@@ -1242,7 +1242,11 @@ def show_customer_branch_stock(customer_id, customer_menu):
     tree.heading(columns[1], text="Branch Name")
     tree.heading(columns[2], text="Branch Type")
     tree.heading(columns[3], text="Product ID")
-    tree.heading(columns[4], text="Quantity")
+    tree.heading(columns[4], text="Product Name")
+    tree.heading(columns[5], text="Cost")
+    tree.heading(columns[6], text="Category Name")
+    tree.heading(columns[7], text="Category Type")
+    tree.heading(columns[8], text="Quantity")
 
     # Kaydırma çubuklarını bağlayın
     x_scroll.config(command=tree.xview)
