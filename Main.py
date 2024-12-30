@@ -1178,9 +1178,93 @@ def open_customer_menu(username, customer_id):
     customer_menu.resizable(False,False)
     center_window(customer_menu, 300, 400)
     
+    img = CTkImage(Image.open("user.png"),size=(180, 180))
+    imagelabel = CTkButton(customer_menu, image=img, text="", fg_color="transparent", hover=False)
+    imagelabel.pack(pady=20)
+    
+    customer_name_label = CTkLabel(customer_menu, text=f"Welcome, {username}", font=FONT)
+    customer_name_label.pack(pady=10)
+    
+    button_add_product = CTkButton(customer_menu, text='Branch Stock', command=lambda: show_customer_branch_stock(customer_id, customer_menu), fg_color=button_color, hover=False, font=FONT, border_width=2, border_color="white", width=150) 
+    button_add_product.pack(pady=20, ipady=15)
+    
     customer_menu.protocol("WM_DELETE_WINDOW", destroy_program)
 
 #--------------------------------------------------------------------------------------------------------------
+
+def show_customer_branch_stock(customer_id, customer_menu):
+    branch_stock_table = CTkToplevel(customer_menu)
+    branch_stock_table.title("Branch Stock")
+    branch_stock_table.geometry("600x400")
+    branch_stock_table.resizable(False, False)
+    center_window(branch_stock_table, 1000, 600)
+    branch_stock_table.transient(customer_menu)
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT city FROM customer WHERE id=%s", (customer_id))
+    customer_city = cursor.fetchone()
+    cursor.execute("SELECT * FROM get_branch_stock_data(%s)",(customer_city,))
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]  
+    style = ttk.Style(branch_stock_table)
+    style.theme_use("clam")
+    style.configure(
+        "Treeview", #hangi ttk widget'ına işlem yapılacağının belirtilmesi
+        font=("Arial", 12),
+        foreground="#fff", #tablodaki değerlerin rengi
+        background="#000", #tablonun arka plan rengi
+        fieldbackground="#313837",
+    )
+    style.map("Treeview", background=[("selected", "#6BF62D")]) #imleçle üzerine gelindiğinde gerçekleşecek işlem
+
+    #Çerçeve oluştur ve tabloyu içine yerleştir
+    frame = ttk.Frame(branch_stock_table)
+    frame.pack(fill="both", expand=True, padx=20, pady=20)  # Çerçeveye boşluk ekle
+
+    #Tablo için kaydırma çubukları
+    x_scroll = ttk.Scrollbar(frame, orient="horizontal")
+    y_scroll = ttk.Scrollbar(frame, orient="vertical")
+    
+    #Tabloyu oluştur
+    tree = ttk.Treeview(
+        frame, 
+        columns=columns, 
+        show="headings", #ilk satırda sütun isimlerini göster
+        xscrollcommand=x_scroll.set, 
+        yscrollcommand=y_scroll.set,
+    )
+    for col in columns: 
+        tree.column(col, anchor="center", width=100) #kolondaki değerin hizalanması
+        
+    tree.heading(columns[0], text="City Name")
+    tree.heading(columns[1], text="Branch Name")
+    tree.heading(columns[2], text="Branch Type")
+    tree.heading(columns[3], text="Product ID")
+    tree.heading(columns[4], text="Quantity")
+
+    # Kaydırma çubuklarını bağlayın
+    x_scroll.config(command=tree.xview)
+    y_scroll.config(command=tree.yview)
+
+    # Kaydırma çubuklarını yerleştirin
+    x_scroll.pack(side="bottom", fill="x")
+    y_scroll.pack(side="right", fill="y")
+
+    # Verileri tabloya ekle
+    for row in rows:
+        tree.insert("", tk.END, values=row)
+
+    # Tabloyu yerleştir
+    tree.pack(fill="both", expand=True)
+    
+          
+    cursor.close()
+    conn.close()
+    
+
+
 def customer_select_window():
     customer_select_window = CTkToplevel(main_menu)
     customer_select_window.title("Customer")
@@ -1334,6 +1418,9 @@ def customer_register():
                     messagebox.showerror("Error", "This password is already in use")
             else:
                 print("An unexpected error occurred:", e)
+        except Exception as e:
+            error_message = str(e).split("CONTEXT")[0].strip()
+            messagebox.showerror("Error", f"Error: {error_message}")
         finally:
             if conn:
                 conn.close()
